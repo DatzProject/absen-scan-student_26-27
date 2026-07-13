@@ -33,7 +33,7 @@ ChartJS.register(
 );
 
 const endpoint =
-  "https://script.google.com/macros/s/AKfycbxgr2JZuzytFX1Yeq6VJRI46_8K0h7gz2tGQa8fTsaCSMOFD_fGjQ7Niah2rSoZbdxM/exec";
+  "https://script.google.com/macros/s/AKfycbyPlDeLjd2W4SjYkuVSGZylOa_jpRd1UUmwetsu_Fn8EYS9YdkpLK-tnkWuE6cUWcpg/exec";
 const SHEET_SEMESTER1 = "RekapSemester1";
 const SHEET_SEMESTER2 = "RekapSemester2";
 
@@ -149,7 +149,8 @@ const AttendanceTab: React.FC<{
   students: Student[];
   onRecapRefresh: () => void;
   onLoadingChange: (loading: boolean) => void;
-}> = ({ students, onRecapRefresh, onLoadingChange }) => {
+  studentsLoaded: boolean;
+}> = ({ students, onRecapRefresh, onLoadingChange, studentsLoaded }) => {
   const [attendance, setAttendance] = useState<AttendanceRecord>({});
 
   const getLocalDate = () => {
@@ -931,7 +932,14 @@ const AttendanceTab: React.FC<{
       const formattedDate = formatDateDDMMYYYY(date);
       // ✅ Kirim parameter tanggal dan kelas ke server
       const url = `${endpoint}?action=attendanceHistory&tanggal=${formattedDate}&kelas=${selectedKelas}`;
-      const response = await fetch(url, { method: "GET", mode: "cors" });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         const result = await response.json();
@@ -991,6 +999,10 @@ const AttendanceTab: React.FC<{
       setScannedStudentPhotos([]);
       setScannedStudents(new Set());
       sendingLockRef.current = new Set(); // ← TAMBAHKAN
+    } else {
+      // Tidak ada siswa sama sekali — matikan loading supaya
+      // tidak nyangkut selamanya di "Mohon Tunggu..."
+      onLoadingChange(false);
     }
   }, [date, selectedKelas, students]);
 
@@ -1254,6 +1266,53 @@ const AttendanceTab: React.FC<{
   const attendanceSummary = getAttendanceSummary();
 
   if (students.length === 0) {
+    // Kalau fetch data siswa BELUM selesai → tampilkan loading
+    if (!studentsLoaded) {
+      return (
+        <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-2xl font-bold text-center text-blue-700 mb-6">
+              📋 Absensi Siswa
+            </h2>
+            <div className="text-center py-12">
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 max-w-md mx-auto">
+                <div className="text-6xl mb-4">⏳</div>
+                <h3 className="text-2xl font-bold text-blue-700 mb-2">
+                  Mohon Tunggu
+                </h3>
+                <p className="text-blue-600 mb-4">
+                  Sedang memuat data siswa...
+                </p>
+                <div className="flex justify-center">
+                  <svg
+                    className="animate-spin h-8 w-8 text-blue-600"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Kalau fetch SUDAH selesai tapi memang tidak ada siswa → tampilkan pesan kosong
     return (
       <div className="max-w-4xl mx-auto" style={{ paddingBottom: "70px" }}>
         <div className="bg-white p-6 rounded-lg shadow-md">
@@ -1261,34 +1320,15 @@ const AttendanceTab: React.FC<{
             📋 Absensi Siswa
           </h2>
           <div className="text-center py-12">
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 max-w-md mx-auto">
-              <div className="text-6xl mb-4">⏳</div>
-              <h3 className="text-2xl font-bold text-blue-700 mb-2">
-                Mohon Tunggu
+            <div className="bg-gray-50 border-2 border-gray-200 rounded-lg p-8 max-w-md mx-auto">
+              <div className="text-6xl mb-4">📭</div>
+              <h3 className="text-2xl font-bold text-gray-700 mb-2">
+                Data Siswa Kosong
               </h3>
-              <p className="text-blue-600 mb-4">Sedang memuat data siswa...</p>
-              <div className="flex justify-center">
-                <svg
-                  className="animate-spin h-8 w-8 text-blue-600"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-              </div>
+              <p className="text-gray-500">
+                Belum ada data siswa yang terdaftar. Silakan tambahkan data
+                siswa terlebih dahulu.
+              </p>
             </div>
           </div>
         </div>
@@ -3998,6 +4038,7 @@ const StudentAttendanceApp: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [schoolData, setSchoolData] = useState<SchoolData | null>(null);
+  const [studentsLoaded, setStudentsLoaded] = useState<boolean>(false);
 
   const fetchStudents = () => {
     fetch(endpoint)
@@ -4031,10 +4072,12 @@ const StudentAttendanceApp: React.FC = () => {
           return a.localeCompare(b);
         });
         setUniqueClasses(["Semua", ...classes]);
+        setStudentsLoaded(true); // ✅ fetch selesai (berhasil)
       })
       .catch((error) => {
         console.error("Error fetch:", error);
         alert("❌ Gagal mengambil data siswa. Cek console untuk detail.");
+        setStudentsLoaded(true); // ✅ fetch selesai (gagal, tapi tetap dianggap selesai)
       });
   };
 
@@ -4204,6 +4247,7 @@ const StudentAttendanceApp: React.FC = () => {
                   students={students}
                   onRecapRefresh={handleRecapRefresh}
                   onLoadingChange={setIsAttendanceLoading}
+                  studentsLoaded={studentsLoaded}
                 />
               </div>
             </>
